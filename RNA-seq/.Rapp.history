@@ -1,0 +1,1038 @@
+source("Prediction_M.R")#
+source("Update.R")#
+source ("whiteness.R")#
+source("D_matrix.R")#
+#
+#Staes#
+gene <- 4 # [ATM,P53,WIP1,MDM2]#
+num_states <- 2^gene #withot dna_dsb#
+A <- matrix(nrow=num_states,ncol =gene)#
+for (i in 1:gene){#
+    temp = rbind(array(0,c(num_states/2^i,1)),array(1,c(num_states/2^i,1)))#
+    A[,i] = kronecker(matrix(1,2^(i-1)),temp)#
+}#
+A= t(A)#
+p <- .05 #state noise#
+q <-.05 #observation noise#
+#
+n <- 2400 # number of observations#
+s_noise1 = rbinom(n, 1, p)#
+s_noise2 = rbinom(n, 1, p)#
+s_noise3 = rbinom(n, 1, p)#
+s_noise4 = rbinom(n, 1, p)#
+##
+seq_depth = runif(1, min=2, max=3.75)# sequencing depth#
+mu = .01#
+delta1 =  2.590647 #rnorm(1,0,3)#this should be positive#
+delta2 = 3.172913#rnorm(1,0,3)#
+delta3 =  1.307635#
+delta4 =  3.027096#
+delta = c(delta1,delta2,delta3,delta4)#
+theta1 = rnorm(n,0,.05)#
+theta2 =  rnorm(n,0,.05)#
+theta3= rnorm(n,0,.05)#
+theta4 = rnorm(n,0,.05)#
+theta  = c(theta1[1],theta2[1],theta3[1],theta4[1])#
+##
+P <- matrix(1/16,num_states,1)#initial PVD I assume it is uniform#
+res_err <- matrix(nrow = gene,ncol =n)#
+ATM<- vector("numeric",n)#initial states#
+P53 <- vector("numeric",n)#
+WIP1 <- vector("numeric",n)#
+MDM2 <- vector("numeric",n)#
+ATM[1] = 0#
+P53[1] = 1#
+WIP1[1] = 1#
+MDM2[1] = 1#
+#context#
+#dna_dsb <- cbind(array(0,c(1,2000)),array(1,c(1,n-2000)))#
+dna_dsb <- array(0,c(1,n))#
+Y1 <- vector("numeric",n)#
+Y2 <- vector("numeric",n)#
+Y3 <- vector("numeric",n)#
+Y4 <- vector("numeric",n)#
+B <- vector("numeric",num_states)#
+D <- D_matrix(A,mu,delta,theta,seq_depth)#
+Mk = prediction_M(A)#
+#
+for (k in 2:n){#
+    if (k<= 900){#
+	ATM[k] = !WIP1[k-1] & (ATM[k-1] | dna_dsb[k-1])+ s_noise1[k]#
+	if (ATM[k]==2)#
+	ATM[k] =0#
+    }#
+    if (k>900) ATM[k]=1#
+    if (ATM[k]==0)#
+    l1 = seq_depth* exp(mu +theta1[k])#
+    if(ATM[k]==1)#
+    l1 = seq_depth* exp(mu + delta1+theta1[k])#
+	P53[k] = !MDM2[k-1] & (ATM[k-1] | WIP1[k-1]) + s_noise2[k]#
+	if (P53[k]==2)#
+	P53[k]=0#
+    if (P53[k]==0)#
+    l2 = seq_depth* exp(mu +theta2[k])#
+    if(P53[k]==1)#
+    l2 = seq_depth* exp(mu + delta2+theta2[k])#
+	WIP1[k] = P53[k-1] + s_noise3[k]#
+	if (WIP1[k]==2)#
+	WIP1[k]=0#
+    if (WIP1[k]==0)#
+    l3 = seq_depth* exp(mu +theta3[k])#
+    if(WIP1[k]==1)#
+    l3 = seq_depth* exp(mu + delta3+theta3[k])#
+	MDM2[k] = !ATM[k-1] & (P53[k-1] | WIP1[k-1]) + s_noise4[k]#
+	if (MDM2[k]==2)#
+	MDM2[k] =0#
+    if (MDM2[k]==0)#
+    l4 = seq_depth* exp(mu +theta4[k])#
+    if(MDM2[k]==1)#
+    l4 = seq_depth* exp(mu + delta4+theta4[k])#
+	#observations#
+	Y1[k] = rpois(1, l1)#
+	Y2[k] = rpois(1, l2)#
+    Y3[k] = rpois(1, l3)#
+    Y4[k] = rpois(1, l4)#
+		y <- rbind(Y1[k],Y2[k],Y3[k],Y4[k])#
+    t <-Update_M(y,A,delta1,delta2,delta3,delta4,theta2[k],theta1[k],theta3[k],theta4[k],seq_depth)#
+	Tk <- diag(t)#
+	PP <- Mk %*% P#
+	B<- Tk %*% PP#
+	P <- B/norm(as.matrix(B))#
+	MMSE <- A %*% P#
+	Apriori = D %*% t#E[y[k]|y[k-1],...,y[1]]#
+    #estimate residual error#
+    res_err[1,k] = Y1[k] - Apriori[1]#
+    res_err[2,k] = Y2[k] - Apriori[2]#
+    res_err[3,k] = Y3[k] - Apriori[3]#
+    res_err[4,k] = Y4[k] - Apriori[4]#
+}#
+#
+par(mfrow = c(2,1))#
+#plot(1:n,dna_dsb,type = "l")#
+plot(1:n,ATM,type="l")#
+Q = whiteness(res_err)#
+plot(Q,type="l")#
+which(Q>=4)
+source("Prediction_M.R")#
+source("Update.R")#
+source ("whiteness.R")#
+source("D_matrix.R")#
+#
+#Staes#
+gene <- 4 # [ATM,P53,WIP1,MDM2]#
+num_states <- 2^gene #withot dna_dsb#
+A <- matrix(nrow=num_states,ncol =gene)#
+for (i in 1:gene){#
+    temp = rbind(array(0,c(num_states/2^i,1)),array(1,c(num_states/2^i,1)))#
+    A[,i] = kronecker(matrix(1,2^(i-1)),temp)#
+}#
+A= t(A)#
+p <- .05 #state noise#
+q <-.05 #observation noise#
+#
+n <- 2400 # number of observations#
+s_noise1 = rbinom(n, 1, p)#
+s_noise2 = rbinom(n, 1, p)#
+s_noise3 = rbinom(n, 1, p)#
+s_noise4 = rbinom(n, 1, p)#
+##
+seq_depth = runif(1, min=2, max=3.75)# sequencing depth#
+mu = .01#
+delta1 =  2.590647 #rnorm(1,0,3)#this should be positive#
+delta2 = 3.172913#rnorm(1,0,3)#
+delta3 =  1.307635#
+delta4 =  3.027096#
+delta = c(delta1,delta2,delta3,delta4)#
+theta1 = rnorm(n,0,.05)#
+theta2 =  rnorm(n,0,.05)#
+theta3= rnorm(n,0,.05)#
+theta4 = rnorm(n,0,.05)#
+theta  = c(theta1[1],theta2[1],theta3[1],theta4[1])#
+##
+P <- matrix(1/16,num_states,1)#initial PVD I assume it is uniform#
+res_err <- matrix(nrow = gene,ncol =n)#
+ATM<- vector("numeric",n)#initial states#
+P53 <- vector("numeric",n)#
+WIP1 <- vector("numeric",n)#
+MDM2 <- vector("numeric",n)#
+ATM[1] = 0#
+P53[1] = 1#
+WIP1[1] = 1#
+MDM2[1] = 1#
+#context#
+#dna_dsb <- cbind(array(0,c(1,2000)),array(1,c(1,n-2000)))#
+dna_dsb <- array(0,c(1,n))#
+Y1 <- vector("numeric",n)#
+Y2 <- vector("numeric",n)#
+Y3 <- vector("numeric",n)#
+Y4 <- vector("numeric",n)#
+B <- vector("numeric",num_states)#
+D <- D_matrix(A,mu,delta,theta,seq_depth)#
+Mk = prediction_M(A)#
+#
+for (k in 2:n){#
+    if (k<= 900){#
+	ATM[k] = !WIP1[k-1] & (ATM[k-1] | dna_dsb[k-1])+ s_noise1[k]#
+	if (ATM[k]==2)#
+	ATM[k] =0#
+    }#
+    if (k>900) ATM[k]=0#
+    if (ATM[k]==0)#
+    l1 = seq_depth* exp(mu +theta1[k])#
+    if(ATM[k]==1)#
+    l1 = seq_depth* exp(mu + delta1+theta1[k])#
+	P53[k] = !MDM2[k-1] & (ATM[k-1] | WIP1[k-1]) + s_noise2[k]#
+	if (P53[k]==2)#
+	P53[k]=0#
+    if (P53[k]==0)#
+    l2 = seq_depth* exp(mu +theta2[k])#
+    if(P53[k]==1)#
+    l2 = seq_depth* exp(mu + delta2+theta2[k])#
+	WIP1[k] = P53[k-1] + s_noise3[k]#
+	if (WIP1[k]==2)#
+	WIP1[k]=0#
+    if (WIP1[k]==0)#
+    l3 = seq_depth* exp(mu +theta3[k])#
+    if(WIP1[k]==1)#
+    l3 = seq_depth* exp(mu + delta3+theta3[k])#
+	MDM2[k] = !ATM[k-1] & (P53[k-1] | WIP1[k-1]) + s_noise4[k]#
+	if (MDM2[k]==2)#
+	MDM2[k] =0#
+    if (MDM2[k]==0)#
+    l4 = seq_depth* exp(mu +theta4[k])#
+    if(MDM2[k]==1)#
+    l4 = seq_depth* exp(mu + delta4+theta4[k])#
+	#observations#
+	Y1[k] = rpois(1, l1)#
+	Y2[k] = rpois(1, l2)#
+    Y3[k] = rpois(1, l3)#
+    Y4[k] = rpois(1, l4)#
+		y <- rbind(Y1[k],Y2[k],Y3[k],Y4[k])#
+    t <-Update_M(y,A,delta1,delta2,delta3,delta4,theta2[k],theta1[k],theta3[k],theta4[k],seq_depth)#
+	Tk <- diag(t)#
+	PP <- Mk %*% P#
+	B<- Tk %*% PP#
+	P <- B/norm(as.matrix(B))#
+	MMSE <- A %*% P#
+	Apriori = D %*% t#E[y[k]|y[k-1],...,y[1]]#
+    #estimate residual error#
+    res_err[1,k] = Y1[k] - Apriori[1]#
+    res_err[2,k] = Y2[k] - Apriori[2]#
+    res_err[3,k] = Y3[k] - Apriori[3]#
+    res_err[4,k] = Y4[k] - Apriori[4]#
+}#
+#
+par(mfrow = c(2,1))#
+#plot(1:n,dna_dsb,type = "l")#
+plot(1:n,ATM,type="l")#
+Q = whiteness(res_err)#
+plot(Q,type="l")#
+which(Q>=4)
+which(Q>=2.5)
+source("Prediction_M.R")#
+source("Update.R")#
+source ("whiteness.R")#
+source("D_matrix.R")#
+#
+#Staes#
+gene <- 4 # [ATM,P53,WIP1,MDM2]#
+num_states <- 2^gene #withot dna_dsb#
+A <- matrix(nrow=num_states,ncol =gene)#
+for (i in 1:gene){#
+    temp = rbind(array(0,c(num_states/2^i,1)),array(1,c(num_states/2^i,1)))#
+    A[,i] = kronecker(matrix(1,2^(i-1)),temp)#
+}#
+A= t(A)#
+p <- .05 #state noise#
+q <-.05 #observation noise#
+#
+n <- 2400 # number of observations#
+s_noise1 = rbinom(n, 1, p)#
+s_noise2 = rbinom(n, 1, p)#
+s_noise3 = rbinom(n, 1, p)#
+s_noise4 = rbinom(n, 1, p)#
+##
+seq_depth = runif(1, min=2, max=3.75)# sequencing depth#
+mu = .01#
+delta1 =  2.590647 #rnorm(1,0,3)#this should be positive#
+delta2 = 3.172913#rnorm(1,0,3)#
+delta3 =  1.307635#
+delta4 =  3.027096#
+delta = c(delta1,delta2,delta3,delta4)#
+theta1 = rnorm(n,0,.05)#
+theta2 =  rnorm(n,0,.05)#
+theta3= rnorm(n,0,.05)#
+theta4 = rnorm(n,0,.05)#
+theta  = c(theta1[1],theta2[1],theta3[1],theta4[1])#
+##
+P <- matrix(1/16,num_states,1)#initial PVD I assume it is uniform#
+res_err <- matrix(nrow = gene,ncol =n)#
+ATM<- vector("numeric",n)#initial states#
+P53 <- vector("numeric",n)#
+WIP1 <- vector("numeric",n)#
+MDM2 <- vector("numeric",n)#
+ATM[1] = 0#
+P53[1] = 1#
+WIP1[1] = 1#
+MDM2[1] = 1#
+#context#
+#dna_dsb <- cbind(array(0,c(1,2000)),array(1,c(1,n-2000)))#
+dna_dsb <- array(0,c(1,n))#
+Y1 <- vector("numeric",n)#
+Y2 <- vector("numeric",n)#
+Y3 <- vector("numeric",n)#
+Y4 <- vector("numeric",n)#
+B <- vector("numeric",num_states)#
+D <- D_matrix(A,mu,delta,theta,seq_depth)#
+Mk = prediction_M(A)#
+#
+for (k in 2:n){#
+	ATM[k] = !WIP1[k-1] & (ATM[k-1] | dna_dsb[k-1])+ s_noise1[k]#
+	if (ATM[k]==2)#
+	ATM[k] =0#
+    if (ATM[k]==0)#
+    l1 = seq_depth* exp(mu +theta1[k])#
+    if(ATM[k]==1)#
+    l1 = seq_depth* exp(mu + delta1+theta1[k])#
+    if (k<= 900){#
+	P53[k] = !MDM2[k-1] & (ATM[k-1] | WIP1[k-1]) + s_noise2[k]#
+	if (P53[k]==2)#
+	P53[k]=0#
+    }#
+    if (k>900) P53[k] = 1#
+    if (P53[k]==0)#
+    l2 = seq_depth* exp(mu +theta2[k])#
+    if(P53[k]==1)#
+    l2 = seq_depth* exp(mu + delta2+theta2[k])#
+	WIP1[k] = P53[k-1] + s_noise3[k]#
+	if (WIP1[k]==2)#
+	WIP1[k]=0#
+    if (WIP1[k]==0)#
+    l3 = seq_depth* exp(mu +theta3[k])#
+    if(WIP1[k]==1)#
+    l3 = seq_depth* exp(mu + delta3+theta3[k])#
+	MDM2[k] = !ATM[k-1] & (P53[k-1] | WIP1[k-1]) + s_noise4[k]#
+	if (MDM2[k]==2)#
+	MDM2[k] =0#
+    if (MDM2[k]==0)#
+    l4 = seq_depth* exp(mu +theta4[k])#
+    if(MDM2[k]==1)#
+    l4 = seq_depth* exp(mu + delta4+theta4[k])#
+	#observations#
+	Y1[k] = rpois(1, l1)#
+	Y2[k] = rpois(1, l2)#
+    Y3[k] = rpois(1, l3)#
+    Y4[k] = rpois(1, l4)#
+		y <- rbind(Y1[k],Y2[k],Y3[k],Y4[k])#
+    t <-Update_M(y,A,delta1,delta2,delta3,delta4,theta2[k],theta1[k],theta3[k],theta4[k],seq_depth)#
+	Tk <- diag(t)#
+	PP <- Mk %*% P#
+	B<- Tk %*% PP#
+	P <- B/norm(as.matrix(B))#
+	MMSE <- A %*% P#
+	Apriori = D %*% t#E[y[k]|y[k-1],...,y[1]]#
+    #estimate residual error#
+    res_err[1,k] = Y1[k] - Apriori[1]#
+    res_err[2,k] = Y2[k] - Apriori[2]#
+    res_err[3,k] = Y3[k] - Apriori[3]#
+    res_err[4,k] = Y4[k] - Apriori[4]#
+}#
+#
+par(mfrow = c(2,1))#
+#plot(1:n,dna_dsb,type = "l")#
+plot(1:n,ATM,type="l")#
+Q = whiteness(res_err)#
+plot(Q,type="l")#
+which(Q>=4)
+source("Prediction_M.R")#
+source("Update.R")#
+source ("whiteness.R")#
+source("D_matrix.R")#
+#
+#Staes#
+gene <- 4 # [ATM,P53,WIP1,MDM2]#
+num_states <- 2^gene #withot dna_dsb#
+A <- matrix(nrow=num_states,ncol =gene)#
+for (i in 1:gene){#
+    temp = rbind(array(0,c(num_states/2^i,1)),array(1,c(num_states/2^i,1)))#
+    A[,i] = kronecker(matrix(1,2^(i-1)),temp)#
+}#
+A= t(A)#
+p <- .05 #state noise#
+q <-.05 #observation noise#
+#
+n <- 2400 # number of observations#
+s_noise1 = rbinom(n, 1, p)#
+s_noise2 = rbinom(n, 1, p)#
+s_noise3 = rbinom(n, 1, p)#
+s_noise4 = rbinom(n, 1, p)#
+##
+seq_depth = runif(1, min=2, max=3.75)# sequencing depth#
+mu = .01#
+delta1 =  2.590647 #rnorm(1,0,3)#this should be positive#
+delta2 = 3.172913#rnorm(1,0,3)#
+delta3 =  1.307635#
+delta4 =  3.027096#
+delta = c(delta1,delta2,delta3,delta4)#
+theta1 = rnorm(n,0,.05)#
+theta2 =  rnorm(n,0,.05)#
+theta3= rnorm(n,0,.05)#
+theta4 = rnorm(n,0,.05)#
+theta  = c(theta1[1],theta2[1],theta3[1],theta4[1])#
+##
+P <- matrix(1/16,num_states,1)#initial PVD I assume it is uniform#
+res_err <- matrix(nrow = gene,ncol =n)#
+ATM<- vector("numeric",n)#initial states#
+P53 <- vector("numeric",n)#
+WIP1 <- vector("numeric",n)#
+MDM2 <- vector("numeric",n)#
+ATM[1] = 0#
+P53[1] = 1#
+WIP1[1] = 1#
+MDM2[1] = 1#
+#context#
+#dna_dsb <- cbind(array(0,c(1,2000)),array(1,c(1,n-2000)))#
+dna_dsb <- array(0,c(1,n))#
+Y1 <- vector("numeric",n)#
+Y2 <- vector("numeric",n)#
+Y3 <- vector("numeric",n)#
+Y4 <- vector("numeric",n)#
+B <- vector("numeric",num_states)#
+D <- D_matrix(A,mu,delta,theta,seq_depth)#
+Mk = prediction_M(A)#
+#
+for (k in 2:n){#
+	ATM[k] = !WIP1[k-1] & (ATM[k-1] | dna_dsb[k-1])+ s_noise1[k]#
+	if (ATM[k]==2)#
+	ATM[k] =0#
+    if (ATM[k]==0)#
+    l1 = seq_depth* exp(mu +theta1[k])#
+    if(ATM[k]==1)#
+    l1 = seq_depth* exp(mu + delta1+theta1[k])#
+    if (k<= 900){#
+	P53[k] = !MDM2[k-1] & (ATM[k-1] | WIP1[k-1]) + s_noise2[k]#
+	if (P53[k]==2)#
+	P53[k]=0#
+    }#
+    if (k>900) P53[k] = 1#
+    if (P53[k]==0)#
+    l2 = seq_depth* exp(mu +theta2[k])#
+    if(P53[k]==1)#
+    l2 = seq_depth* exp(mu + delta2+theta2[k])#
+	WIP1[k] = P53[k-1] + s_noise3[k]#
+	if (WIP1[k]==2)#
+	WIP1[k]=0#
+    if (WIP1[k]==0)#
+    l3 = seq_depth* exp(mu +theta3[k])#
+    if(WIP1[k]==1)#
+    l3 = seq_depth* exp(mu + delta3+theta3[k])#
+	MDM2[k] = !ATM[k-1] & (P53[k-1] | WIP1[k-1]) + s_noise4[k]#
+	if (MDM2[k]==2)#
+	MDM2[k] =0#
+    if (MDM2[k]==0)#
+    l4 = seq_depth* exp(mu +theta4[k])#
+    if(MDM2[k]==1)#
+    l4 = seq_depth* exp(mu + delta4+theta4[k])#
+	#observations#
+	Y1[k] = rpois(1, l1)#
+	Y2[k] = rpois(1, l2)#
+    Y3[k] = rpois(1, l3)#
+    Y4[k] = rpois(1, l4)#
+		y <- rbind(Y1[k],Y2[k],Y3[k],Y4[k])#
+    t <-Update_M(y,A,delta1,delta2,delta3,delta4,theta2[k],theta1[k],theta3[k],theta4[k],seq_depth)#
+	Tk <- diag(t)#
+	PP <- Mk %*% P#
+	B<- Tk %*% PP#
+	P <- B/norm(as.matrix(B))#
+	MMSE <- A %*% P#
+	Apriori = D %*% t#E[y[k]|y[k-1],...,y[1]]#
+    #estimate residual error#
+    res_err[1,k] = Y1[k] - Apriori[1]#
+    res_err[2,k] = Y2[k] - Apriori[2]#
+    res_err[3,k] = Y3[k] - Apriori[3]#
+    res_err[4,k] = Y4[k] - Apriori[4]#
+}#
+#
+par(mfrow = c(2,1))#
+#plot(1:n,dna_dsb,type = "l")#
+plot(1:n,P53,type="l")#
+Q = whiteness(res_err)#
+plot(Q,type="l")#
+which(Q>=4)
+690+300
+source("Prediction_M.R")#
+source("Update.R")#
+source ("whiteness.R")#
+source("D_matrix.R")#
+#
+#Staes#
+gene <- 4 # [ATM,P53,WIP1,MDM2]#
+num_states <- 2^gene #withot dna_dsb#
+A <- matrix(nrow=num_states,ncol =gene)#
+for (i in 1:gene){#
+    temp = rbind(array(0,c(num_states/2^i,1)),array(1,c(num_states/2^i,1)))#
+    A[,i] = kronecker(matrix(1,2^(i-1)),temp)#
+}#
+A= t(A)#
+p <- .05 #state noise#
+q <-.05 #observation noise#
+#
+n <- 2400 # number of observations#
+s_noise1 = rbinom(n, 1, p)#
+s_noise2 = rbinom(n, 1, p)#
+s_noise3 = rbinom(n, 1, p)#
+s_noise4 = rbinom(n, 1, p)#
+##
+seq_depth = runif(1, min=2, max=3.75)# sequencing depth#
+mu = .01#
+delta1 =  2.590647 #rnorm(1,0,3)#this should be positive#
+delta2 = 3.172913#rnorm(1,0,3)#
+delta3 =  1.307635#
+delta4 =  3.027096#
+delta = c(delta1,delta2,delta3,delta4)#
+theta1 = rnorm(n,0,.05)#
+theta2 =  rnorm(n,0,.05)#
+theta3= rnorm(n,0,.05)#
+theta4 = rnorm(n,0,.05)#
+theta  = c(theta1[1],theta2[1],theta3[1],theta4[1])#
+##
+P <- matrix(1/16,num_states,1)#initial PVD I assume it is uniform#
+res_err <- matrix(nrow = gene,ncol =n)#
+ATM<- vector("numeric",n)#initial states#
+P53 <- vector("numeric",n)#
+WIP1 <- vector("numeric",n)#
+MDM2 <- vector("numeric",n)#
+ATM[1] = 0#
+P53[1] = 1#
+WIP1[1] = 1#
+MDM2[1] = 1#
+#context#
+#dna_dsb <- cbind(array(0,c(1,2000)),array(1,c(1,n-2000)))#
+dna_dsb <- array(0,c(1,n))#
+Y1 <- vector("numeric",n)#
+Y2 <- vector("numeric",n)#
+Y3 <- vector("numeric",n)#
+Y4 <- vector("numeric",n)#
+B <- vector("numeric",num_states)#
+D <- D_matrix(A,mu,delta,theta,seq_depth)#
+Mk = prediction_M(A)#
+#
+for (k in 2:n){#
+	ATM[k] = !WIP1[k-1] & (ATM[k-1] | dna_dsb[k-1])+ s_noise1[k]#
+	if (ATM[k]==2)#
+	ATM[k] =0#
+    if (ATM[k]==0)#
+    l1 = seq_depth* exp(mu +theta1[k])#
+    if(ATM[k]==1)#
+    l1 = seq_depth* exp(mu + delta1+theta1[k])#
+    if (k<= 900){#
+	P53[k] = !MDM2[k-1] & (ATM[k-1] | WIP1[k-1]) + s_noise2[k]#
+	if (P53[k]==2)#
+	P53[k]=0#
+    }#
+    if (k>900) P53[k] = 0#
+    if (P53[k]==0)#
+    l2 = seq_depth* exp(mu +theta2[k])#
+    if(P53[k]==1)#
+    l2 = seq_depth* exp(mu + delta2+theta2[k])#
+	WIP1[k] = P53[k-1] + s_noise3[k]#
+	if (WIP1[k]==2)#
+	WIP1[k]=0#
+    if (WIP1[k]==0)#
+    l3 = seq_depth* exp(mu +theta3[k])#
+    if(WIP1[k]==1)#
+    l3 = seq_depth* exp(mu + delta3+theta3[k])#
+	MDM2[k] = !ATM[k-1] & (P53[k-1] | WIP1[k-1]) + s_noise4[k]#
+	if (MDM2[k]==2)#
+	MDM2[k] =0#
+    if (MDM2[k]==0)#
+    l4 = seq_depth* exp(mu +theta4[k])#
+    if(MDM2[k]==1)#
+    l4 = seq_depth* exp(mu + delta4+theta4[k])#
+	#observations#
+	Y1[k] = rpois(1, l1)#
+	Y2[k] = rpois(1, l2)#
+    Y3[k] = rpois(1, l3)#
+    Y4[k] = rpois(1, l4)#
+		y <- rbind(Y1[k],Y2[k],Y3[k],Y4[k])#
+    t <-Update_M(y,A,delta1,delta2,delta3,delta4,theta2[k],theta1[k],theta3[k],theta4[k],seq_depth)#
+	Tk <- diag(t)#
+	PP <- Mk %*% P#
+	B<- Tk %*% PP#
+	P <- B/norm(as.matrix(B))#
+	MMSE <- A %*% P#
+	Apriori = D %*% t#E[y[k]|y[k-1],...,y[1]]#
+    #estimate residual error#
+    res_err[1,k] = Y1[k] - Apriori[1]#
+    res_err[2,k] = Y2[k] - Apriori[2]#
+    res_err[3,k] = Y3[k] - Apriori[3]#
+    res_err[4,k] = Y4[k] - Apriori[4]#
+}#
+#
+par(mfrow = c(2,1))#
+#plot(1:n,dna_dsb,type = "l")#
+plot(1:n,P53,type="l")#
+Q = whiteness(res_err)#
+plot(Q,type="l")#
+which(Q>=4)
+900+300
+source("Prediction_M.R")#
+source("Update.R")#
+source ("whiteness.R")#
+source("D_matrix.R")#
+#
+#Staes#
+gene <- 4 # [ATM,P53,WIP1,MDM2]#
+num_states <- 2^gene #withot dna_dsb#
+A <- matrix(nrow=num_states,ncol =gene)#
+for (i in 1:gene){#
+    temp = rbind(array(0,c(num_states/2^i,1)),array(1,c(num_states/2^i,1)))#
+    A[,i] = kronecker(matrix(1,2^(i-1)),temp)#
+}#
+A= t(A)#
+p <- .05 #state noise#
+q <-.05 #observation noise#
+#
+n <- 2400 # number of observations#
+s_noise1 = rbinom(n, 1, p)#
+s_noise2 = rbinom(n, 1, p)#
+s_noise3 = rbinom(n, 1, p)#
+s_noise4 = rbinom(n, 1, p)#
+##
+seq_depth = runif(1, min=2, max=3.75)# sequencing depth#
+mu = .01#
+delta1 =  2.590647 #rnorm(1,0,3)#this should be positive#
+delta2 = 3.172913#rnorm(1,0,3)#
+delta3 =  1.307635#
+delta4 =  3.027096#
+delta = c(delta1,delta2,delta3,delta4)#
+theta1 = rnorm(n,0,.05)#
+theta2 =  rnorm(n,0,.05)#
+theta3= rnorm(n,0,.05)#
+theta4 = rnorm(n,0,.05)#
+theta  = c(theta1[1],theta2[1],theta3[1],theta4[1])#
+##
+P <- matrix(1/16,num_states,1)#initial PVD I assume it is uniform#
+res_err <- matrix(nrow = gene,ncol =n)#
+ATM<- vector("numeric",n)#initial states#
+P53 <- vector("numeric",n)#
+WIP1 <- vector("numeric",n)#
+MDM2 <- vector("numeric",n)#
+ATM[1] = 0#
+P53[1] = 1#
+WIP1[1] = 1#
+MDM2[1] = 1#
+#context#
+#dna_dsb <- cbind(array(0,c(1,2000)),array(1,c(1,n-2000)))#
+dna_dsb <- array(0,c(1,n))#
+Y1 <- vector("numeric",n)#
+Y2 <- vector("numeric",n)#
+Y3 <- vector("numeric",n)#
+Y4 <- vector("numeric",n)#
+B <- vector("numeric",num_states)#
+D <- D_matrix(A,mu,delta,theta,seq_depth)#
+Mk = prediction_M(A)#
+#
+for (k in 2:n){#
+	ATM[k] = !WIP1[k-1] & (ATM[k-1] | dna_dsb[k-1])+ s_noise1[k]#
+	if (ATM[k]==2)#
+	ATM[k] =0#
+    if (ATM[k]==0)#
+    l1 = seq_depth* exp(mu +theta1[k])#
+    if(ATM[k]==1)#
+    l1 = seq_depth* exp(mu + delta1+theta1[k])#
+	P53[k] = !MDM2[k-1] & (ATM[k-1] | WIP1[k-1]) + s_noise2[k]#
+	if (P53[k]==2)#
+	P53[k]=0#
+    if (P53[k]==0)#
+    l2 = seq_depth* exp(mu +theta2[k])#
+    if(P53[k]==1)#
+    l2 = seq_depth* exp(mu + delta2+theta2[k])#
+    if (k<= 1550){#
+	WIP1[k] = P53[k-1] + s_noise3[k]#
+	if (WIP1[k]==2)#
+	WIP1[k]=0#
+    }#
+    if (k>1550) WIP1[k] = 1#
+    if (WIP1[k]==0)#
+    l3 = seq_depth* exp(mu +theta3[k])#
+    if(WIP1[k]==1)#
+    l3 = seq_depth* exp(mu + delta3+theta3[k])#
+	MDM2[k] = !ATM[k-1] & (P53[k-1] | WIP1[k-1]) + s_noise4[k]#
+	if (MDM2[k]==2)#
+	MDM2[k] =0#
+    if (MDM2[k]==0)#
+    l4 = seq_depth* exp(mu +theta4[k])#
+    if(MDM2[k]==1)#
+    l4 = seq_depth* exp(mu + delta4+theta4[k])#
+	#observations#
+	Y1[k] = rpois(1, l1)#
+	Y2[k] = rpois(1, l2)#
+    Y3[k] = rpois(1, l3)#
+    Y4[k] = rpois(1, l4)#
+		y <- rbind(Y1[k],Y2[k],Y3[k],Y4[k])#
+    t <-Update_M(y,A,delta1,delta2,delta3,delta4,theta2[k],theta1[k],theta3[k],theta4[k],seq_depth)#
+	Tk <- diag(t)#
+	PP <- Mk %*% P#
+	B<- Tk %*% PP#
+	P <- B/norm(as.matrix(B))#
+	MMSE <- A %*% P#
+	Apriori = D %*% t#E[y[k]|y[k-1],...,y[1]]#
+    #estimate residual error#
+    res_err[1,k] = Y1[k] - Apriori[1]#
+    res_err[2,k] = Y2[k] - Apriori[2]#
+    res_err[3,k] = Y3[k] - Apriori[3]#
+    res_err[4,k] = Y4[k] - Apriori[4]#
+}#
+#
+par(mfrow = c(2,1))#
+#plot(1:n,dna_dsb,type = "l")#
+plot(1:n,WIP1,type="l")#
+Q = whiteness(res_err)#
+plot(Q,type="l")#
+which(Q>=4)
+1470+300
+source("Prediction_M.R")#
+source("Update.R")#
+source ("whiteness.R")#
+source("D_matrix.R")#
+#
+#Staes#
+gene <- 4 # [ATM,P53,WIP1,MDM2]#
+num_states <- 2^gene #withot dna_dsb#
+A <- matrix(nrow=num_states,ncol =gene)#
+for (i in 1:gene){#
+    temp = rbind(array(0,c(num_states/2^i,1)),array(1,c(num_states/2^i,1)))#
+    A[,i] = kronecker(matrix(1,2^(i-1)),temp)#
+}#
+A= t(A)#
+p <- .05 #state noise#
+q <-.05 #observation noise#
+#
+n <- 2400 # number of observations#
+s_noise1 = rbinom(n, 1, p)#
+s_noise2 = rbinom(n, 1, p)#
+s_noise3 = rbinom(n, 1, p)#
+s_noise4 = rbinom(n, 1, p)#
+##
+seq_depth = runif(1, min=2, max=3.75)# sequencing depth#
+mu = .01#
+delta1 =  2.590647 #rnorm(1,0,3)#this should be positive#
+delta2 = 3.172913#rnorm(1,0,3)#
+delta3 =  1.307635#
+delta4 =  3.027096#
+delta = c(delta1,delta2,delta3,delta4)#
+theta1 = rnorm(n,0,.05)#
+theta2 =  rnorm(n,0,.05)#
+theta3= rnorm(n,0,.05)#
+theta4 = rnorm(n,0,.05)#
+theta  = c(theta1[1],theta2[1],theta3[1],theta4[1])#
+##
+P <- matrix(1/16,num_states,1)#initial PVD I assume it is uniform#
+res_err <- matrix(nrow = gene,ncol =n)#
+ATM<- vector("numeric",n)#initial states#
+P53 <- vector("numeric",n)#
+WIP1 <- vector("numeric",n)#
+MDM2 <- vector("numeric",n)#
+ATM[1] = 0#
+P53[1] = 1#
+WIP1[1] = 1#
+MDM2[1] = 1#
+#context#
+#dna_dsb <- cbind(array(0,c(1,2000)),array(1,c(1,n-2000)))#
+dna_dsb <- array(0,c(1,n))#
+Y1 <- vector("numeric",n)#
+Y2 <- vector("numeric",n)#
+Y3 <- vector("numeric",n)#
+Y4 <- vector("numeric",n)#
+B <- vector("numeric",num_states)#
+D <- D_matrix(A,mu,delta,theta,seq_depth)#
+Mk = prediction_M(A)#
+#
+for (k in 2:n){#
+	ATM[k] = !WIP1[k-1] & (ATM[k-1] | dna_dsb[k-1])+ s_noise1[k]#
+	if (ATM[k]==2)#
+	ATM[k] =0#
+    if (ATM[k]==0)#
+    l1 = seq_depth* exp(mu +theta1[k])#
+    if(ATM[k]==1)#
+    l1 = seq_depth* exp(mu + delta1+theta1[k])#
+	P53[k] = !MDM2[k-1] & (ATM[k-1] | WIP1[k-1]) + s_noise2[k]#
+	if (P53[k]==2)#
+	P53[k]=0#
+    if (P53[k]==0)#
+    l2 = seq_depth* exp(mu +theta2[k])#
+    if(P53[k]==1)#
+    l2 = seq_depth* exp(mu + delta2+theta2[k])#
+    if (k<= 1550){#
+	WIP1[k] = P53[k-1] + s_noise3[k]#
+	if (WIP1[k]==2)#
+	WIP1[k]=0#
+    }#
+    if (k>1550) WIP1[k] = 0#
+    if (WIP1[k]==0)#
+    l3 = seq_depth* exp(mu +theta3[k])#
+    if(WIP1[k]==1)#
+    l3 = seq_depth* exp(mu + delta3+theta3[k])#
+	MDM2[k] = !ATM[k-1] & (P53[k-1] | WIP1[k-1]) + s_noise4[k]#
+	if (MDM2[k]==2)#
+	MDM2[k] =0#
+    if (MDM2[k]==0)#
+    l4 = seq_depth* exp(mu +theta4[k])#
+    if(MDM2[k]==1)#
+    l4 = seq_depth* exp(mu + delta4+theta4[k])#
+	#observations#
+	Y1[k] = rpois(1, l1)#
+	Y2[k] = rpois(1, l2)#
+    Y3[k] = rpois(1, l3)#
+    Y4[k] = rpois(1, l4)#
+		y <- rbind(Y1[k],Y2[k],Y3[k],Y4[k])#
+    t <-Update_M(y,A,delta1,delta2,delta3,delta4,theta2[k],theta1[k],theta3[k],theta4[k],seq_depth)#
+	Tk <- diag(t)#
+	PP <- Mk %*% P#
+	B<- Tk %*% PP#
+	P <- B/norm(as.matrix(B))#
+	MMSE <- A %*% P#
+	Apriori = D %*% t#E[y[k]|y[k-1],...,y[1]]#
+    #estimate residual error#
+    res_err[1,k] = Y1[k] - Apriori[1]#
+    res_err[2,k] = Y2[k] - Apriori[2]#
+    res_err[3,k] = Y3[k] - Apriori[3]#
+    res_err[4,k] = Y4[k] - Apriori[4]#
+}#
+#
+par(mfrow = c(2,1))#
+#plot(1:n,dna_dsb,type = "l")#
+plot(1:n,WIP1,type="l")#
+Q = whiteness(res_err)#
+plot(Q,type="l")#
+which(Q>=4)
+1310+300
+source("Prediction_M.R")#
+source("Update.R")#
+source ("whiteness.R")#
+source("D_matrix.R")#
+#
+#Staes#
+gene <- 4 # [ATM,P53,WIP1,MDM2]#
+num_states <- 2^gene #withot dna_dsb#
+A <- matrix(nrow=num_states,ncol =gene)#
+for (i in 1:gene){#
+    temp = rbind(array(0,c(num_states/2^i,1)),array(1,c(num_states/2^i,1)))#
+    A[,i] = kronecker(matrix(1,2^(i-1)),temp)#
+}#
+A= t(A)#
+p <- .05 #state noise#
+q <-.05 #observation noise#
+#
+n <- 2400 # number of observations#
+s_noise1 = rbinom(n, 1, p)#
+s_noise2 = rbinom(n, 1, p)#
+s_noise3 = rbinom(n, 1, p)#
+s_noise4 = rbinom(n, 1, p)#
+##
+seq_depth = runif(1, min=2, max=3.75)# sequencing depth#
+mu = .01#
+delta1 =  2.590647 #rnorm(1,0,3)#this should be positive#
+delta2 = 3.172913#rnorm(1,0,3)#
+delta3 =  1.307635#
+delta4 =  3.027096#
+delta = c(delta1,delta2,delta3,delta4)#
+theta1 = rnorm(n,0,.05)#
+theta2 =  rnorm(n,0,.05)#
+theta3= rnorm(n,0,.05)#
+theta4 = rnorm(n,0,.05)#
+theta  = c(theta1[1],theta2[1],theta3[1],theta4[1])#
+##
+P <- matrix(1/16,num_states,1)#initial PVD I assume it is uniform#
+res_err <- matrix(nrow = gene,ncol =n)#
+ATM<- vector("numeric",n)#initial states#
+P53 <- vector("numeric",n)#
+WIP1 <- vector("numeric",n)#
+MDM2 <- vector("numeric",n)#
+ATM[1] = 0#
+P53[1] = 1#
+WIP1[1] = 1#
+MDM2[1] = 1#
+#context#
+#dna_dsb <- cbind(array(0,c(1,2000)),array(1,c(1,n-2000)))#
+dna_dsb <- array(0,c(1,n))#
+Y1 <- vector("numeric",n)#
+Y2 <- vector("numeric",n)#
+Y3 <- vector("numeric",n)#
+Y4 <- vector("numeric",n)#
+B <- vector("numeric",num_states)#
+D <- D_matrix(A,mu,delta,theta,seq_depth)#
+Mk = prediction_M(A)#
+#
+for (k in 2:n){#
+	ATM[k] = !WIP1[k-1] & (ATM[k-1] | dna_dsb[k-1])+ s_noise1[k]#
+	if (ATM[k]==2)#
+	ATM[k] =0#
+    if (ATM[k]==0)#
+    l1 = seq_depth* exp(mu +theta1[k])#
+    if(ATM[k]==1)#
+    l1 = seq_depth* exp(mu + delta1+theta1[k])#
+	P53[k] = !MDM2[k-1] & (ATM[k-1] | WIP1[k-1]) + s_noise2[k]#
+	if (P53[k]==2)#
+	P53[k]=0#
+    if (P53[k]==0)#
+    l2 = seq_depth* exp(mu +theta2[k])#
+    if(P53[k]==1)#
+    l2 = seq_depth* exp(mu + delta2+theta2[k])#
+	WIP1[k] = P53[k-1] + s_noise3[k]#
+	if (WIP1[k]==2)#
+	WIP1[k]=0#
+    if (WIP1[k]==0)#
+    l3 = seq_depth* exp(mu +theta3[k])#
+    if(WIP1[k]==1)#
+    l3 = seq_depth* exp(mu + delta3+theta3[k])#
+    if (k<= 1780){#
+	MDM2[k] = !ATM[k-1] & (P53[k-1] | WIP1[k-1]) + s_noise4[k]#
+	if (MDM2[k]==2)#
+        MDM2[k] =0}#
+	if (k>1780) MDM2[k] = 1#
+    if (MDM2[k]==0)#
+    l4 = seq_depth* exp(mu +theta4[k])#
+    if(MDM2[k]==1)#
+    l4 = seq_depth* exp(mu + delta4+theta4[k])#
+	#observations#
+	Y1[k] = rpois(1, l1)#
+	Y2[k] = rpois(1, l2)#
+    Y3[k] = rpois(1, l3)#
+    Y4[k] = rpois(1, l4)#
+		y <- rbind(Y1[k],Y2[k],Y3[k],Y4[k])#
+    t <-Update_M(y,A,delta1,delta2,delta3,delta4,theta2[k],theta1[k],theta3[k],theta4[k],seq_depth)#
+	Tk <- diag(t)#
+	PP <- Mk %*% P#
+	B<- Tk %*% PP#
+	P <- B/norm(as.matrix(B))#
+	MMSE <- A %*% P#
+	Apriori = D %*% t#E[y[k]|y[k-1],...,y[1]]#
+    #estimate residual error#
+    res_err[1,k] = Y1[k] - Apriori[1]#
+    res_err[2,k] = Y2[k] - Apriori[2]#
+    res_err[3,k] = Y3[k] - Apriori[3]#
+    res_err[4,k] = Y4[k] - Apriori[4]#
+}#
+#
+par(mfrow = c(2,1))#
+#plot(1:n,dna_dsb,type = "l")#
+plot(1:n,MDM2,type="l")#
+Q = whiteness(res_err)#
+plot(Q,type="l")#
+which(Q>=4)
+source("Prediction_M.R")#
+source("Update.R")#
+source ("whiteness.R")#
+source("D_matrix.R")#
+#
+#Staes#
+gene <- 4 # [ATM,P53,WIP1,MDM2]#
+num_states <- 2^gene #withot dna_dsb#
+A <- matrix(nrow=num_states,ncol =gene)#
+for (i in 1:gene){#
+    temp = rbind(array(0,c(num_states/2^i,1)),array(1,c(num_states/2^i,1)))#
+    A[,i] = kronecker(matrix(1,2^(i-1)),temp)#
+}#
+A= t(A)#
+p <- .05 #state noise#
+q <-.05 #observation noise#
+#
+n <- 2400 # number of observations#
+s_noise1 = rbinom(n, 1, p)#
+s_noise2 = rbinom(n, 1, p)#
+s_noise3 = rbinom(n, 1, p)#
+s_noise4 = rbinom(n, 1, p)#
+##
+seq_depth = runif(1, min=2, max=3.75)# sequencing depth#
+mu = .01#
+delta1 =  2.590647 #rnorm(1,0,3)#this should be positive#
+delta2 = 3.172913#rnorm(1,0,3)#
+delta3 =  1.307635#
+delta4 =  3.027096#
+delta = c(delta1,delta2,delta3,delta4)#
+theta1 = rnorm(n,0,.05)#
+theta2 =  rnorm(n,0,.05)#
+theta3= rnorm(n,0,.05)#
+theta4 = rnorm(n,0,.05)#
+theta  = c(theta1[1],theta2[1],theta3[1],theta4[1])#
+##
+P <- matrix(1/16,num_states,1)#initial PVD I assume it is uniform#
+res_err <- matrix(nrow = gene,ncol =n)#
+ATM<- vector("numeric",n)#initial states#
+P53 <- vector("numeric",n)#
+WIP1 <- vector("numeric",n)#
+MDM2 <- vector("numeric",n)#
+ATM[1] = 0#
+P53[1] = 1#
+WIP1[1] = 1#
+MDM2[1] = 1#
+#context#
+#dna_dsb <- cbind(array(0,c(1,2000)),array(1,c(1,n-2000)))#
+dna_dsb <- array(0,c(1,n))#
+Y1 <- vector("numeric",n)#
+Y2 <- vector("numeric",n)#
+Y3 <- vector("numeric",n)#
+Y4 <- vector("numeric",n)#
+B <- vector("numeric",num_states)#
+D <- D_matrix(A,mu,delta,theta,seq_depth)#
+Mk = prediction_M(A)#
+#
+for (k in 2:n){#
+	ATM[k] = !WIP1[k-1] & (ATM[k-1] | dna_dsb[k-1])+ s_noise1[k]#
+	if (ATM[k]==2)#
+	ATM[k] =0#
+    if (ATM[k]==0)#
+    l1 = seq_depth* exp(mu +theta1[k])#
+    if(ATM[k]==1)#
+    l1 = seq_depth* exp(mu + delta1+theta1[k])#
+	P53[k] = !MDM2[k-1] & (ATM[k-1] | WIP1[k-1]) + s_noise2[k]#
+	if (P53[k]==2)#
+	P53[k]=0#
+    if (P53[k]==0)#
+    l2 = seq_depth* exp(mu +theta2[k])#
+    if(P53[k]==1)#
+    l2 = seq_depth* exp(mu + delta2+theta2[k])#
+	WIP1[k] = P53[k-1] + s_noise3[k]#
+	if (WIP1[k]==2)#
+	WIP1[k]=0#
+    if (WIP1[k]==0)#
+    l3 = seq_depth* exp(mu +theta3[k])#
+    if(WIP1[k]==1)#
+    l3 = seq_depth* exp(mu + delta3+theta3[k])#
+    if (k<= 1780){#
+	MDM2[k] = !ATM[k-1] & (P53[k-1] | WIP1[k-1]) + s_noise4[k]#
+	if (MDM2[k]==2)#
+        MDM2[k] =0}#
+	if (k>1780) MDM2[k] = 0#
+    if (MDM2[k]==0)#
+    l4 = seq_depth* exp(mu +theta4[k])#
+    if(MDM2[k]==1)#
+    l4 = seq_depth* exp(mu + delta4+theta4[k])#
+	#observations#
+	Y1[k] = rpois(1, l1)#
+	Y2[k] = rpois(1, l2)#
+    Y3[k] = rpois(1, l3)#
+    Y4[k] = rpois(1, l4)#
+		y <- rbind(Y1[k],Y2[k],Y3[k],Y4[k])#
+    t <-Update_M(y,A,delta1,delta2,delta3,delta4,theta2[k],theta1[k],theta3[k],theta4[k],seq_depth)#
+	Tk <- diag(t)#
+	PP <- Mk %*% P#
+	B<- Tk %*% PP#
+	P <- B/norm(as.matrix(B))#
+	MMSE <- A %*% P#
+	Apriori = D %*% t#E[y[k]|y[k-1],...,y[1]]#
+    #estimate residual error#
+    res_err[1,k] = Y1[k] - Apriori[1]#
+    res_err[2,k] = Y2[k] - Apriori[2]#
+    res_err[3,k] = Y3[k] - Apriori[3]#
+    res_err[4,k] = Y4[k] - Apriori[4]#
+}#
+#
+par(mfrow = c(2,1))#
+#plot(1:n,dna_dsb,type = "l")#
+plot(1:n,MDM2,type="l")#
+Q = whiteness(res_err)#
+plot(Q,type="l")#
+which(Q>=4)

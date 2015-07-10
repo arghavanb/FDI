@@ -1,0 +1,195 @@
+source("Update.R")
+source("Prediction_M.R")
+source("stuckp530.R")
+source("stuckp531.R")
+source("stuckatm0.R")
+source("stuckatm1.R")
+source("stuckmdm0.R")
+source("stuckmdm1.R")
+source("stuckwip1.R")
+source("stuckwip0.R")
+source("ObservedData.R")
+
+q <- .1
+#global values
+theta1 <<- rnorm(n,0,q)
+theta2 <<-  rnorm(n,0,q)
+theta3 <<- rnorm(n,0,q)
+theta4 <<-rnorm(n,0,q)
+delta1 <<-  rnorm(1,1,.05)
+delta2 <<- rnorm(1,1,.05)
+delta3 <<-  rnorm(1,1,.05)
+delta4 <<-  rnorm(1,1,.05)
+delta = c(delta1,delta2,delta3,delta4)
+dna_dsb <<- 1
+#States
+gene <- 4 # [ATM,P53,WIP1,MDM2]
+dd <- 2^gene #withot dna_dsb
+A <- matrix(nrow=dd,ncol =gene)
+for (i in 1:gene){
+    temp = rbind(array(0,c(dd/2^i,1)),array(1,c(dd/2^i,1)))
+    A[,i] = kronecker(matrix(1,2^(i-1)),temp)
+}
+
+Ap0 = A
+Ap0[,2]=0
+Ap0 =t(Ap0)
+Ap1 = A
+Ap1[,2]=1
+Ap1 =t(Ap1)
+Aa0 = A
+Aa0[,1]=0
+Aa0 =t(Aa0)
+Aa1 = A
+Aa1[,1]=1
+Aa1 =t(Aa1)
+Am0 = A
+Am0[,4]=0
+Am0 =t(Am0)
+Am1 = A
+Am1[,4]=1
+Am1 =t(Am1)
+Aw0 = A
+Aw0[,3]=0
+Aw0 =t(Aw0)
+Aw1 = A
+Aw1[,3]=1
+Aw1 =t(Aw1)
+A= t(A)
+num_states <- ncol(A)
+
+n <- 100 # number of observations
+ch <-50 # change ponit
+
+P <- matrix(1/num_states,num_states,1)#initial PVD I assume it is uniform
+Pp0 <- matrix(1/num_states,num_states,1)
+Pp1 <- matrix(1/num_states,num_states,1)
+Pa0 <- matrix(1/num_states,num_states,1)
+Pa1 <- matrix(1/num_states,num_states,1)
+Pw0 <- matrix(1/num_states,num_states,1)
+Pw1 <- matrix(1/num_states,num_states,1)
+Pm0 <- matrix(1/num_states,num_states,1)
+Pm1 <- matrix(1/num_states,num_states,1)
+
+proby <- vector("numeric",n)
+fp0 <- vector("numeric",n)
+fp1 <- vector("numeric",n)
+fa0<-vector("numeric",n)
+fa1 <- vector("numeric",n)
+fw0<-vector("numeric",n)
+fw1<-vector("numeric",n)
+fm0<-vector("numeric",n)
+fm1<-vector("numeric",n)
+Sa0 <- vector("numeric",n)
+Sa1<- vector("numeric",n)
+Sp0<- vector("numeric",n)
+Sp1<- vector("numeric",n)
+Sw0<- vector("numeric",n)
+Sw1<- vector("numeric",n)
+Sm0<- vector("numeric",n)
+Sm1<- vector("numeric",n)
+Sa0[1]=0
+Sa1[1]=0
+Sp0[1]=0
+Sp1[1]=0
+Sw0[1]=0
+Sw1[1]=0
+Sm0[1]=0
+Sm1[1]=0
+obData<- ObservedData()
+#prediction matrix for normal case
+Mk = prediction_M(A,p)
+Mp0 = Stuck_P530(Ap0,p)
+Mp1<-Stuck_P531(Ap1,p)
+Ma0<-Stuck_ATM0(Aa0,p)
+Ma1<-Stuck_ATM1(Aa1,p)
+Mw0<- Stuck_wip0(Aw0,p)
+Mw1<- Stuck_wip1(Aw1,p)
+Mm0<- Stuck_mdm0(Am0,p)
+Mm1<- Stuck_mdm1(Am1,p)
+for (k in 2:n){
+    
+    theta = c(theta1[k],theta2[k],theta3[k],theta4[k])
+    y <- rbind(obData[[1]][k],obData[[2]][k],obData[[3]][k],obData[[4]][k])
+    t <-Update_M(y,A,delta,theta,seq_depth)#estimate update vector
+    Tk <- diag(t) #diagonalize to get update matrix
+    PP <- Mk %*% P#
+    B<- Tk %*% PP
+    proby[k] <- t %*% PP
+    P <- B/norm(as.matrix(B))
+    ####################
+    ta0 <-Update_M(y,Aa0,delta,theta,seq_depth)
+    Ta0 <- diag(ta0)
+    PPa0 <- Ma0 %*% Pa0
+    Ba0<- Ta0 %*% PPa0
+    Pa0 <- Ba0/norm(as.matrix(Ba0))
+    fa0[k] = ta0%*%PPa0
+    Sa0[k] = Sa0[k-1] + log(fa0[k]/proby[k])
+    ###################
+    ta1 <-Update_M(y,Aa1,delta,theta,seq_depth)
+    Ta1 <- diag(ta1)
+    PPa1 <- Ma1 %*% Pa1
+    Ba1<- Ta1 %*% PPa1
+    Pa1 <- Ba1/norm(as.matrix(Ba1))
+    fa1[k] = ta1%*%PPa1
+    Sa1[k] = Sa1[k-1] + log(fa1[k]/proby[k])
+    ###################
+    tp0 <-Update_M(y,Ap0,delta,theta,seq_depth)
+    Tp0 <- diag(tp0)
+    PPp0 <- Mp0 %*% Pp0
+    Bp0<- Tp0 %*% PPp0
+    Pp0 <- Bp0/norm(as.matrix(Bp0))
+    fp0[k] = tp0%*%PPp0
+    Sp0[k] = Sp0[k-1] + log(fp0[k]/proby[k])
+    ###########
+    tp1 <-Update_M(y,Ap1,delta,theta,seq_depth)
+    Tp1 <- diag(tp1)
+    PPp1 <- Mp1 %*% Pp1
+    Bp1<- Tp1 %*% PPp1
+    Pp1 <- Bp1/norm(as.matrix(Bp1))
+    fp1[k] = tp1%*%PPp1
+    Sp1[k] = Sp1[k-1] + log(fp1[k]/proby[k])
+    ##############
+    tw0 <-Update_M(y,Aw0,delta,theta,seq_depth)
+    Tw0 <- diag(tw0)
+    PPw0 <- Mw0 %*% Pw0
+    Bw0<- Tw0 %*% PPw0
+    Pw0 <- Bw0/norm(as.matrix(Bw0))
+    fw0[k] = tw0%*%PPw0
+    Sw0[k] = Sw0[k-1] + log(fw0[k]/proby[k])
+    ###################
+    tw1 <-Update_M(y,Aw1,delta,theta,seq_depth)
+    Tw1 <- diag(tw1)
+    PPw1 <- Mw1 %*% Pw1
+    Bw1<- Tw1 %*% PPw1
+    Pw1 <- Bw1/norm(as.matrix(Bw1))
+    fw1[k] = tw1%*%PPw1
+    Sw1[k] = Sw1[k-1] + log(fw1[k]/proby[k])
+    ###################
+    tm0 <-Update_M(y,Am0,delta,theta,seq_depth)
+    Tm0 <- diag(tm0)
+    PPm0 <- Mm0 %*% Pm0
+    Bm0<- Tm0 %*% PPm0
+    Pm0 <- Bm0/norm(as.matrix(Bm0))
+    fm0[k] = tm0%*%PPm0
+    Sm0[k] = Sm0[k-1] + log(fm0[k]/proby[k])
+    ###################
+    tm1 <-Update_M(y,Am1,delta,theta,seq_depth)
+    Tm1 <- diag(tm1)
+    PPm1 <- Mm1 %*% Pm1
+    Bm1<- Tm1 %*% PPm1
+    Pm1 <- Bm1/norm(as.matrix(Bm1))
+    fm1[k] = tm1%*%PPm1
+    Sm1[k] = Sm1[k-1] + log(fm1[k]/proby[k])
+    ###################
+   
+}
+
+plot(Sa0,type="l")
+plot(Sa1,type="l")
+plot(Sp0,type="l")
+plot(Sp1,type="l")
+plot(Sw0,type="l")
+plot(Sw1,type="l")
+plot(Sm0,type="l")
+plot(Sm1,type="l")
